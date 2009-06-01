@@ -953,7 +953,16 @@ module Formtastic #:nodoc:
     # And it will generate a fieldset for each task with legend 'Task #1', 'Task #2',
     # 'Task #3' and so on.
     #
+    #
+    # When using semantic_fields_for, you may want to nest the fieldset inside of an 
+    # existing fieldset. To do so, use:
+    #
+    #   f.inputs :nested => true
+    #
+    # And it will place the fieldset inside of an <li> tag, thus nesting it inside of an existing fieldset
+    #
     def field_set_and_list_wrapping(html_options, contents='', &block) #:nodoc:
+      nested  = html_options.delete(:nested)
       legend  = html_options.delete(:name).to_s
       legend %= parent_child_index(html_options[:parent]) if html_options[:parent]
       legend  = template.content_tag(:legend, template.content_tag(:span, legend)) unless legend.blank?
@@ -966,6 +975,8 @@ module Formtastic #:nodoc:
         legend + template.content_tag(:ol, contents),
         html_options.except(:builder, :parent)
       )
+      
+      fieldset = nested ? template.content_tag(:li, fieldset) : fieldset
 
       template.concat(fieldset) if block_given?
       fieldset
