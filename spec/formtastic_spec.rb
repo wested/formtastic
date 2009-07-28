@@ -573,11 +573,20 @@ describe 'Formtastic' do
 
           describe 'when not provided' do
 
-            it 'should default to a string for forms without objects' do
+            it 'should default to a string for forms without objects unless column is password' do
               semantic_form_for(:project, :url => 'http://test.host') do |builder|
                 concat(builder.input(:anything))
               end
               output_buffer.should have_tag('form li.string')
+            end
+
+            it 'should default to password for forms without objects if column is password' do
+              semantic_form_for(:project, :url => 'http://test.host') do |builder|
+                concat(builder.input(:password))
+                concat(builder.input(:password_confirmation))
+                concat(builder.input(:confirm_password))
+              end
+              output_buffer.should have_tag('form li.password', :count => 3)
             end
 
             it 'should default to a string for methods on objects that don\'t respond to "column_for_attribute"' do
@@ -688,45 +697,84 @@ describe 'Formtastic' do
         end
 
         describe ':label option' do
-
+          
           describe 'when provided' do
-
             it 'should be passed down to the label tag' do
               semantic_form_for(@new_post) do |builder|
                 concat(builder.input(:title, :label => "Kustom"))
               end
               output_buffer.should have_tag("form li label", /Kustom/)
             end
-
           end
 
           describe 'when not provided' do
-            describe 'and object is not given' do
-              it 'should default the humanized method name, passing it down to the label tag' do
-                Formtastic::SemanticFormBuilder.label_str_method = :humanize
-
-                semantic_form_for(:project, :url => 'http://test.host') do |builder|
-                  concat(builder.input(:meta_description))
+            describe 'when localized label is NOT provided' do
+              describe 'and object is not given' do
+                it 'should default the humanized method name, passing it down to the label tag' do
+                  Formtastic::SemanticFormBuilder.label_str_method = :humanize
+              
+                  semantic_form_for(:project, :url => 'http://test.host') do |builder|
+                    concat(builder.input(:meta_description))
+                  end
+              
+                  output_buffer.should have_tag("form li label", /#{'meta_description'.humanize}/)
                 end
-
-                output_buffer.should have_tag("form li label", /#{'meta_description'.humanize}/)
+              end
+              
+              describe 'and object is given' do
+                it 'should delegate the label logic to class human attribute name and pass it down to the label tag' do
+                  @new_post.stub!(:meta_description) # a two word method name
+                  @new_post.class.should_receive(:human_attribute_name).with('meta_description').and_return('meta_description'.humanize)
+              
+                  semantic_form_for(@new_post) do |builder|
+                    concat(builder.input(:meta_description))
+                  end
+              
+                  output_buffer.should have_tag("form li label", /#{'meta_description'.humanize}/)
+                end
               end
             end
+            
+            describe 'when localized label is provided' do
+              before do
+                @localized_label_text = 'Localized title'
+                @default_localized_label_text = 'Default localized title'
+                ::I18n.backend.store_translations :en,
+                  :formtastic => {
+                      :labels => {
+                        :title => @default_localized_label_text,
+                        :post => {
+                          :title => @localized_label_text
+                         }
+                       }
+                    }
+                ::Formtastic::SemanticFormBuilder.i18n_lookups_by_default = false
+              end
 
-            describe 'and object is given' do
-              it 'should delegate the label logic to class human attribute name and pass it down to the label tag' do
-                @new_post.stub!(:meta_description) # a two word method name
-                @new_post.class.should_receive(:human_attribute_name).with('meta_description').and_return('meta_description'.humanize)
-
+              it 'should render a label with localized label (I18n)' do
                 semantic_form_for(@new_post) do |builder|
-                  concat(builder.input(:meta_description))
+                  concat(builder.input(:title, :label => true))
                 end
+                output_buffer.should have_tag('form li label', @localized_label_text)
+              end
 
-                output_buffer.should have_tag("form li label", /#{'meta_description'.humanize}/)
+              it 'should render a hint paragraph containing an optional localized label (I18n) if first is not set' do
+                ::I18n.backend.store_translations :en,
+                  :formtastic => {
+                      :labels => {
+                        :post => {
+                          :title => nil
+                         }
+                       }
+                    }
+                semantic_form_for(@new_post) do |builder|
+                  concat(builder.input(:title, :label => true))
+                end
+                output_buffer.should have_tag('form li label', @default_localized_label_text)
               end
             end
           end
-
+          
         end
 
         describe ':hint option' do
@@ -742,12 +790,63 @@ describe 'Formtastic' do
           end
 
           describe 'when not provided' do
-            it 'should not render a hint paragraph' do
-              hint_text = "this is the title of the post"
-              semantic_form_for(@new_post) do |builder|
-                concat(builder.input(:title))
+            describe 'when localized hint (I18n) is provided' do
+              before do
+                @localized_hint_text = "This is the localized hint."
+                @default_localized_hint_text = "This is the default localized hint."
+                ::I18n.backend.store_translations :en,
+                  :formtastic => {
+                      :hints => {
+                        :title => @default_localized_hint_text,
+                        :post => {
+                          :title => @localized_hint_text
+                         }
+                       }
+                    }
+                ::Formtastic::SemanticFormBuilder.i18n_lookups_by_default = false
               end
-              output_buffer.should_not have_tag("form li p.inline-hints")
+              
+              describe 'when provided value (hint value) is set to TRUE' do
+                it 'should render a hint paragraph containing a localized hint (I18n)' do
+                  semantic_form_for(@new_post) do |builder|
+                    concat(builder.input(:title, :hint => true))
+                  end
+                  output_buffer.should have_tag('form li p.inline-hints', @localized_hint_text)
+                end
+                
+                it 'should render a hint paragraph containing an optional localized hint (I18n) if first is not set' do
+                  ::I18n.backend.store_translations :en,
+                  :formtastic => {
+                      :hints => {
+                        :post => {
+                          :title => nil
+                         }
+                       }
+                    }
+                  semantic_form_for(@new_post) do |builder|
+                    concat(builder.input(:title, :hint => true))
+                  end
+                  output_buffer.should have_tag('form li p.inline-hints', @default_localized_hint_text)
+                end
+              end
+              
+              describe 'when provided value (label value) is set to FALSE' do
+                it 'should not render a hint paragraph' do
+                  semantic_form_for(@new_post) do |builder|
+                    concat(builder.input(:title, :hint => false))
+                  end
+                  output_buffer.should_not have_tag('form li p.inline-hints', @localized_hint_text)
+                end
+              end
+            end
+            
+            describe 'when localized hint (I18n) is not provided' do
+              it 'should not render a hint paragraph' do
+                semantic_form_for(@new_post) do |builder|
+                  concat(builder.input(:title))
+                end
+                output_buffer.should_not have_tag('form li p.inline-hints')
+              end
             end
           end
 
@@ -922,31 +1021,33 @@ describe 'Formtastic' do
             output_buffer.should have_tag("form li input[@name=\"post[title]\"]")
           end
 
-          it 'should have a maxlength matching the column limit' do
-            @new_post.column_for_attribute(:title).limit.should == 50
-            output_buffer.should have_tag("form li input[@maxlength='50']")
-          end
-
-          it 'should use default_text_field_size for columns longer than default_text_field_size' do
-            default_size = Formtastic::SemanticFormBuilder.default_text_field_size
-            @new_post.stub!(:column_for_attribute).and_return(mock('column', :type => type, :limit => default_size * 2))
-
-            semantic_form_for(@new_post) do |builder|
-              concat(builder.input(:title, :as => type))
+          unless type == :numeric
+            it 'should have a maxlength matching the column limit' do
+              @new_post.column_for_attribute(:title).limit.should == 50
+              output_buffer.should have_tag("form li input[@maxlength='50']")
             end
 
-            output_buffer.should have_tag("form li input[@size='#{default_size}']")
-          end
+            it 'should use default_text_field_size for columns longer than default_text_field_size' do
+              default_size = Formtastic::SemanticFormBuilder.default_text_field_size
+              @new_post.stub!(:column_for_attribute).and_return(mock('column', :type => type, :limit => default_size * 2))
 
-          it 'should use the column size for columns shorter than default_text_field_size' do
-            column_limit_shorted_than_default = 1
-            @new_post.stub!(:column_for_attribute).and_return(mock('column', :type => type, :limit => column_limit_shorted_than_default))
+              semantic_form_for(@new_post) do |builder|
+                concat(builder.input(:title, :as => type))
+              end
 
-            semantic_form_for(@new_post) do |builder|
-              concat(builder.input(:title, :as => type))
+              output_buffer.should have_tag("form li input[@size='#{default_size}']")
             end
 
-            output_buffer.should have_tag("form li input[@size='#{column_limit_shorted_than_default}']")
+            it 'should use the column size for columns shorter than default_text_field_size' do
+              column_limit_shorted_than_default = 1
+              @new_post.stub!(:column_for_attribute).and_return(mock('column', :type => type, :limit => column_limit_shorted_than_default))
+
+              semantic_form_for(@new_post) do |builder|
+                concat(builder.input(:title, :as => type))
+              end
+
+              output_buffer.should have_tag("form li input[@size='#{column_limit_shorted_than_default}']")
+            end
           end
 
           it 'should use default_text_field_size for methods without database columns' do
