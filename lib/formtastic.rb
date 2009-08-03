@@ -572,6 +572,7 @@ module Formtastic #:nodoc:
 
       reflection = find_reflection(method)
       if reflection && [ :has_many, :has_and_belongs_to_many ].include?(reflection.macro)
+        options[:include_blank]   = false
         html_options[:multiple] ||= true
         html_options[:size]     ||= 5
        end
@@ -1101,6 +1102,7 @@ module Formtastic #:nodoc:
     # be used for the input
     #
     #   belongs_to :author; f.input :author; will generate 'author_id'
+    #   belongs_to :entity, :foreign_key = :owner_id; f.input :author; will generate 'owner_id'
     #   has_many :authors; f.input :authors; will generate 'author_ids'
     #   has_and_belongs_to_many will act like has_many
     #
@@ -1109,7 +1111,7 @@ module Formtastic #:nodoc:
         if [:has_and_belongs_to_many, :has_many].include?(reflection.macro)
           "#{method.to_s.singularize}_ids"
         else
-          "#{method}_id"
+          reflection.options[:foreign_key] || "#{method}_id"
         end
       else
         method
